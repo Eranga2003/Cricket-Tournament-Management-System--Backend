@@ -45,6 +45,7 @@ app.get("/", (req, res) => res.send("API Running 🚀"));
 app.use("/api/tournaments", require("./routes/tournamentRoutes"));
 app.use("/api/captains", require("./routes/captainRoutes"));
 app.use("/api/teams", require("./routes/teamRoutes"));
+app.use("/api/players", require("./routes/playerRoutes"));
 
 console.log("📌 Route initialization complete");
 

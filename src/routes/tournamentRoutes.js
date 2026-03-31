@@ -16,4 +16,4 @@ router.get("/", getTournaments);
 // Get tournaments by organizer
 router.get("/organizer/:organizer_id", getTournamentsByOrganizer);
 
-module.exports = router;
+module.exports = router; 
