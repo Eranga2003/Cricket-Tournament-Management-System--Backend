@@ -5,23 +5,23 @@ let db, bucket, firebaseInitialized = false;
 try {
   // Try to load real service account key
   const serviceAccount = require("./serviceAccountKey.json");
-  
+
   if (!admin.apps.length) {
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
-      storageBucket: "softballtournamentapp.appspot.com",
+      storageBucket: "cricket-tournament-management.firebasestorage.app",
     });
     firebaseInitialized = true;
     console.log("✅ Firebase initialized with service account");
   }
-  
+
   db = admin.firestore();
   bucket = admin.storage ? admin.storage().bucket() : null;
 
 } catch (err) {
   console.warn("⚠️  Firebase initialization failed:", err.message);
   console.log("📝 Using mock database mode for development");
-  
+
   // Create a mock db object that simulates Firestore for development
   db = {
     collection: (name) => ({
@@ -39,11 +39,11 @@ try {
       }),
       get: async () => ({
         docs: [],
-        forEach: () => {},
+        forEach: () => { },
       }),
     }),
   };
-  
+
   firebaseInitialized = false;
 }
 

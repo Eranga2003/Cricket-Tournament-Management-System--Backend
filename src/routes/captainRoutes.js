@@ -1,9 +1,11 @@
 const express = require("express");
 const router = express.Router();
+const { registerCaptain, loginCaptain } = require("../controllers/captainController");
 
-const { registerCaptain } = require("../controllers/captainController");
-
-// Register captain
+// Register new captain
 router.post("/register", registerCaptain);
+
+// Login captain
+router.post("/login", loginCaptain);
 
 module.exports = router;

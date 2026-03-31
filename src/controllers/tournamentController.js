@@ -5,8 +5,9 @@ const { db } = require("../config/firebase");
 // ===============================
 exports.createTournament = async (req, res) => {
     try {
+        const organizer_id = req.user.id; // From JWT
+
         const {
-            organizer_id,
             name,
             date_time,
             registration_fee,
@@ -21,9 +22,9 @@ exports.createTournament = async (req, res) => {
         } = req.body;
 
         // ✅ Validation
-        if (!organizer_id || !name || !date_time) {
+        if (!name || !date_time) {
             return res.status(400).json({
-                msg: "organizer_id, name, and date_time are required"
+                msg: "name and date_time are required"
             });
         }
 
@@ -52,7 +53,7 @@ exports.createTournament = async (req, res) => {
         await tournamentRef.set(tournamentData);
 
         // ✅ Terminal log
-        console.log(`🏆 Tournament Created: ${name}`);
+        console.log(`🏆 Tournament Created: ${name} by Organizer: ${organizer_id}`);
 
         res.json({
             msg: "Tournament created successfully",
@@ -64,7 +65,6 @@ exports.createTournament = async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 };
-
 
 // ===============================
 // GET ALL TOURNAMENTS
@@ -90,9 +90,37 @@ exports.getTournaments = async (req, res) => {
     }
 };
 
+// ===============================
+// GET TOURNAMENTS OF LOGGED-IN ORGANIZER
+// ===============================
+exports.getMyTournaments = async (req, res) => {
+    try {
+        const organizer_id = req.user.id; // from JWT
+
+        const snapshot = await db
+            .collection("tournaments")
+            .where("organizer_id", "==", organizer_id)
+            .get();
+
+        if (snapshot.empty) {
+            return res.json({ tournaments: [] });
+        }
+
+        const tournaments = [];
+        snapshot.forEach((doc) => {
+            tournaments.push({ id: doc.id, ...doc.data() });
+        });
+
+        res.json({ tournaments });
+
+    } catch (err) {
+        console.error("❌ Fetch tournaments error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+};
 
 // ===============================
-// GET TOURNAMENTS BY ORGANIZER
+// GET TOURNAMENTS BY ORGANIZER (Public)
 // ===============================
 exports.getTournamentsByOrganizer = async (req, res) => {
     try {

@@ -1,14 +1,14 @@
 const express = require("express");
 const router = express.Router();
-const { registerOrganizer, loginOrganizer, listOrganizers } = require("../controllers/organizerController");
+const { registerOrganizer, listOrganizers, loginOrganizer } = require("../controllers/organizerController");
 
-// Register new organizer
+// Register
 router.post("/register", registerOrganizer);
 
-// Login organizer
+// Login
 router.post("/login", loginOrganizer);
 
-// List organizers (optional)
+// List organizers (optional, admin only)
 router.get("/", listOrganizers);
 
 module.exports = router;
