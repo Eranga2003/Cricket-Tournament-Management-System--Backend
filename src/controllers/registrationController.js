@@ -2,7 +2,8 @@ const {
     applyForTournament,
     getRegistrationsByTournament,
     getRegistrationsByCaptain,
-    updateRegistrationStatus
+    updateRegistrationStatus,
+    verifyAndScanRegistration
 } = require("../models/registrationModel");
 
 exports.applyTournament = async (req, res) => {
@@ -72,5 +73,27 @@ exports.approveOrReject = async (req, res) => {
     } catch (err) {
         console.error("❌ Update status error:", err.message);
         res.status(500).json({ error: err.message });
+    }
+};
+
+// 📱 Match-Day QR Scanning Processor
+exports.scanQRCode = async (req, res) => {
+    try {
+        const { qr_data } = req.body; // e.g., "REG-12345"
+        if (!qr_data || !qr_data.startsWith("REG-")) {
+            return res.status(400).json({ msg: "Invalid QR System format. Expected 'REG-xxxx'" });
+        }
+
+        // Unpack data naturally
+        const registrationId = qr_data.split("REG-")[1];
+        const organizerId = req.user.id; // Scanned securely by Organizer Token
+
+        const scannedReg = await verifyAndScanRegistration(registrationId, organizerId);
+
+        console.log(`📱 Team Arrived! Registration ${registrationId} has physically checked into the tournament.`);
+        res.json({ msg: "Team arrived successfully! System updated.", registration: scannedReg });
+    } catch (err) {
+        console.error("❌ QR Scan Denied:", err.message);
+        res.status(400).json({ error: err.message });
     }
 };

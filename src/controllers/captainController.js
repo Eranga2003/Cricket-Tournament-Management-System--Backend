@@ -62,7 +62,7 @@ exports.loginCaptain = async (req, res) => {
         const token = jwt.sign(
             { id: captainDoc.id, role: "captain" },
             process.env.JWT_SECRET || "secret",
-            { expiresIn: "1h" }
+            { expiresIn: "1d" }
         );
 
         res.json({

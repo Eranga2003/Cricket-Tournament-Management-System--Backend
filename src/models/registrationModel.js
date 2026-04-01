@@ -10,9 +10,9 @@ const applyForTournament = async (data) => {
         team_id: data.team_id,
         captain_id: data.captain_id,
         selected_players: data.selected_players || [],
-        status: "pending", // pending, approved, rejected
-        payment_status: "pending", // pending, paid
-        qr_code: null, // generate upon approval
+        status: "pending", // pending, approved, arrived, rejected
+        payment_status: "pending",
+        qr_code: null,
         created_at: new Date()
     };
 
@@ -46,9 +46,34 @@ const updateRegistrationStatus = async (id, status, qr_code = null) => {
     return { id, status, qr_code };
 };
 
+// Match-Day: Scan QR code logic
+const verifyAndScanRegistration = async (registrationId, organizerId) => {
+    const regRef = db.collection(COLLECTION_NAME).doc(registrationId);
+    const regSnap = await regRef.get();
+
+    if (!regSnap.exists) throw new Error("Registration not found");
+    const registration = regSnap.data();
+
+    // Verify the logged-in user actually owns this tournament
+    const tourneySnap = await db.collection("tournaments").doc(registration.tournament_id).get();
+    if (!tourneySnap.exists || tourneySnap.data().organizer_id !== organizerId) {
+        throw new Error("Unauthorized restriction: You do not natively own this tournament");
+    }
+
+    // Prevent double scans or sneaking in
+    if (registration.status !== "approved") {
+        throw new Error(`Cannot scan this code. The team's active status is currently: ${registration.status}`);
+    }
+
+    // Update their status instantly to arrived
+    await regRef.update({ status: "arrived" });
+    return { id: registrationId, ...registration, status: "arrived" };
+};
+
 module.exports = {
     applyForTournament,
     getRegistrationsByTournament,
     getRegistrationsByCaptain,
-    updateRegistrationStatus
+    updateRegistrationStatus,
+    verifyAndScanRegistration
 };

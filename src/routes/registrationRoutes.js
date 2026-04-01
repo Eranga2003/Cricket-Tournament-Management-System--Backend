@@ -6,7 +6,8 @@ const {
     applyTournament,
     getTournamentRegistrations,
     getMyRegistrations,
-    approveOrReject
+    approveOrReject,
+    scanQRCode
 } = require("../controllers/registrationController");
 
 // Captain applies for tournament
@@ -20,5 +21,8 @@ router.get("/tournament/:id", verifyToken, getTournamentRegistrations);
 
 // Organizer approves / rejects a registration
 router.put("/:id/status", verifyToken, approveOrReject);
+
+// Organizer scans Captain QR code on Match Day
+router.post("/scan", verifyToken, scanQRCode);
 
 module.exports = router;
