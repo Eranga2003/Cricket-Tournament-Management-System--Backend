@@ -47,6 +47,8 @@ app.use("/api/captains", require("./routes/captainRoutes"));
 app.use("/api/teams", require("./routes/teamRoutes"));
 app.use("/api/players", require("./routes/playerRoutes"));
 app.use("/api/registrations", require("./routes/registrationRoutes"));
+app.use("/api/matches", require("./routes/matchRoutes"));
+app.use("/api/scoring", require("./routes/scoringRoutes"));
 
 console.log("📌 Route initialization complete");
 
