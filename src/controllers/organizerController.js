@@ -1,16 +1,29 @@
 const { db } = require("../config/firebase"); // Firebase admin import
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const { uploadImage } = require("../services/storageService"); // Added storage service
 
 // ===============================
 // Register a new Organizer
 // ===============================
 exports.registerOrganizer = async (req, res) => {
   try {
-    const { org_name, email, phone, password, logo, sponsors } = req.body;
+    const { org_name, email, phone, password, sponsors } = req.body;
+    let { logo } = req.body;
 
     if (!org_name || !email || !phone || !password) {
       return res.status(400).json({ msg: "org_name, email, phone, and password are required" });
+    }
+
+    // Handle image upload to Supabase if a file exists
+    if (req.file) {
+      try {
+        logo = await uploadImage(req.file);
+        console.log(`✅ Organizer Logo uploaded to Supabase: ${logo}`);
+      } catch (uploadErr) {
+        console.error("❌ Failed to upload image to Supabase:", uploadErr.message);
+        return res.status(500).json({ msg: "Error uploading image to Supabase", error: uploadErr.message });
+      }
     }
 
     // Check if organizer already exists

@@ -1,4 +1,38 @@
 const { db } = require("../config/firebase");
+const { uploadImage } = require("../services/storageService");
+const { getWeatherByLocation } = require("../services/weatherService"); // Added weather service
+
+// ===============================
+// GET TOURNAMENT BY ID (with Weather)
+// ===============================
+exports.getTournamentById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const tournamentDoc = await db.collection("tournaments").doc(id).get();
+
+        if (!tournamentDoc.exists) {
+            return res.status(404).json({ msg: "Tournament not found" });
+        }
+
+        const tournamentData = { id: tournamentDoc.id, ...tournamentDoc.data() };
+
+        // Attempt to fetch weather for the tournament date and location
+        let weather = null;
+        if (tournamentData.location && tournamentData.date_time) {
+            weather = await getWeatherByLocation(tournamentData.location, tournamentData.date_time);
+        }
+
+        res.json({
+            msg: "Tournament details retrieved",
+            tournament: tournamentData,
+            weather: weather // This will contain the forecast
+        });
+
+    } catch (err) {
+        console.error("❌ Get tournament by ID error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+};
 
 // ===============================
 // CREATE TOURNAMENT
@@ -18,8 +52,25 @@ exports.createTournament = async (req, res) => {
             prize_2nd,
             prize_3rd,
             contact_numbers,
-            ground_images
+            near_city
         } = req.body;
+
+        let { ground_images } = req.body;
+        if (!Array.isArray(ground_images)) ground_images = [];
+
+        // Handle multiple image uploads if they exist (from req.files)
+        if (req.files && req.files.length > 0) {
+            try {
+                const bucketName = process.env.SUPABASE_BUCKET || "logos";
+                const uploadPromises = req.files.map(file => uploadImage(file, bucketName));
+                const uploadedUrls = await Promise.all(uploadPromises);
+                ground_images = [...ground_images, ...uploadedUrls];
+                console.log(`✅ ${req.files.length} ground images uploaded to Supabase bucket: ${bucketName}`);
+            } catch (uploadErr) {
+                console.error("❌ Multiple image upload error:", uploadErr.message);
+                return res.status(500).json({ msg: "Error uploading tournament images", error: uploadErr.message });
+            }
+        }
 
         // ✅ Validation
         if (!name || !date_time) {
@@ -43,6 +94,7 @@ exports.createTournament = async (req, res) => {
             prize_2nd: prize_2nd || 0,
             prize_3rd: prize_3rd || 0,
             contact_numbers: contact_numbers || [],
+            near_city: near_city || "",
             ground_images: ground_images || [],
             share_link: `https://yourapp.com/tournament/${tournamentRef.id}`,
             status: "upcoming",
@@ -140,6 +192,26 @@ exports.getTournamentsByOrganizer = async (req, res) => {
 
     } catch (err) {
         console.error("❌ Organizer tournaments error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+};
+
+// ===============================
+// GET WEATHER DATA (Wrapper for weatherService)
+// ===============================
+exports.getWeather = async (req, res) => {
+    try {
+        const { location, date } = req.query;
+
+        if (!location || !date) {
+            return res.status(400).json({ msg: "Location and date are required" });
+        }
+
+        const weather = await getWeatherByLocation(location, date);
+        res.json(weather); 
+
+    } catch (err) {
+        console.error("❌ Get weather error:", err.message);
         res.status(500).json({ error: err.message });
     }
 };

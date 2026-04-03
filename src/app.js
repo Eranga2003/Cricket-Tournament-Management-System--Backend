@@ -4,6 +4,18 @@ const app = express();
 // Middlewares
 app.use(express.json());
 
+// Catch SyntaxError in JSON (e.g. malformed JSON in request body)
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && "body" in err) {
+    console.error("❌ Malformed JSON request received:", err.message);
+    return res.status(400).json({
+      msg: "Invalid JSON format. Please ensure all keys and string values are wrapped in double quotes (\").",
+      error: err.message,
+    });
+  }
+  next();
+});
+
 // Enable CORS for frontend communication
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
@@ -20,25 +32,8 @@ const teamRoutes = require("./routes/teamRoutes");
 console.log("📌 Starting route initialization...");
 
 // Routes
-try {
-  console.log("⏳ Loading authRoutes...");
-  const authRoutes = require("./routes/authRoutes");
-  console.log("✅ authRoutes loaded:", typeof authRoutes);
-  app.use("/api/auth", authRoutes);
-  console.log("✅ authRoutes registered");
-} catch (err) {
-  console.error("❌ Error with authRoutes:", err.message);
-}
+console.log("📌 Starting route initialization...");
 
-try {
-  console.log("⏳ Loading organizationRoutes...");
-  const organizationRoutes = require("./routes/organizationRoutes");
-  console.log("✅ organizationRoutes loaded:", typeof organizationRoutes);
-  app.use("/api/organizations", organizationRoutes);
-  console.log("✅ organizationRoutes registered");
-} catch (err) {
-  console.error("❌ Error with organizationRoutes:", err.message);
-}
 
 try {
   console.log("⏳ Loading organizerRoutes...");
@@ -54,6 +49,22 @@ try {
 
 // Test route
 app.get("/", (req, res) => res.send("API Running 🚀"));
+
+// DB Health Check Route
+app.get("/api/test-db", async (req, res) => {
+  try {
+    const { firebaseInitialized, db } = require("./src/config/firebase");
+    if (!firebaseInitialized) {
+      return res.status(500).json({ status: "error", message: "Firebase not initialized" });
+    }
+    // Try a simple read to confirm connection
+    await db.collection("captains").limit(1).get();
+    res.json({ status: "success", message: "Firebase connection is healthy", details: { initialized: true } });
+  } catch (err) {
+    res.status(500).json({ status: "error", message: err.message });
+  }
+});
+
 app.use("/api/tournaments", require("./routes/tournamentRoutes"));
 app.use("/api/captains", require("./routes/captainRoutes"));
 app.use("/api/teams", require("./routes/teamRoutes"));

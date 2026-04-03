@@ -2,13 +2,26 @@ const { createTeam, getTeams } = require("../models/teamModel");
 const { db } = require("../config/firebase");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const { uploadImage } = require("../services/storageService"); // Added storage service
 
 exports.registerTeam = async (req, res) => {
   try {
-    const { captain_id, team_name, team_email, password, location, logo_url } = req.body;
+    const { captain_id, team_name, team_email, password, location } = req.body;
+    let { logo_url } = req.body;
     
     if (!captain_id || !team_name || !team_email || !password) {
       return res.status(400).json({ msg: "captain_id, team_name, team_email, and password strictly required natively" });
+    }
+
+    // Handle image upload to Supabase if a file exists
+    if (req.file) {
+      try {
+        logo_url = await uploadImage(req.file);
+        console.log(`✅ Logo uploaded to Supabase: ${logo_url}`);
+      } catch (uploadErr) {
+        console.error("❌ Failed to upload image to Supabase:", uploadErr.message);
+        return res.status(500).json({ msg: "Error uploading image to Supabase", error: uploadErr.message });
+      }
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -19,7 +32,7 @@ exports.registerTeam = async (req, res) => {
       captain_id,
       team_name,
       location,
-      logo_url
+      logo_url: logo_url || "" // Store the Supabase URL in Firebase
     });
 
     console.log(`🛡️ Dedicated Team Profile built: ${team_name}`);
