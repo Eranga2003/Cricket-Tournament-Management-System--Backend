@@ -20,7 +20,7 @@ exports.registerCaptain = async (req, res) => {
         // 🔐 Hash password
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // Save to DB
+        // Save to captains collection
         const captain = await createCaptain({
             name,
             email,
@@ -29,7 +29,20 @@ exports.registerCaptain = async (req, res) => {
             profile_image_url
         });
 
-        console.log(`👨‍✈️ Captain Registered: ${name} (${email})`);
+        // Also create a entry in players collection so they have a profile
+        await db.collection("players").doc(captain.captain_id).set({
+            name,
+            username: email, // Use email as initial username for captain profile
+            password_hash: hashedPassword,
+            mobile_number: mobile,
+            is_captain: true,
+            team_id: null,
+            role: "Captain",
+            image_url: profile_image_url || "",
+            created_at: new Date()
+        });
+
+        console.log(`👨‍✈️ Captain Registered & Player Profile Created: ${name} (${email})`);
 
         res.json({
             msg: "Captain registered successfully",
@@ -60,7 +73,7 @@ exports.loginCaptain = async (req, res) => {
         if (!isMatch) return res.status(400).json({ msg: "Invalid credentials" });
 
         const token = jwt.sign(
-            { id: captainDoc.id, role: "captain" },
+            { id: captainDoc.id, role: "captain", team_id: captain.team_id },
             process.env.JWT_SECRET || "secret",
             { expiresIn: "1d" }
         );
@@ -68,7 +81,13 @@ exports.loginCaptain = async (req, res) => {
         res.json({
             msg: "Login successful",
             token,
-            captain: { id: captainDoc.id, name: captain.name, email: captain.email }
+            captain: { 
+                id: captainDoc.id, 
+                name: captain.name, 
+                email: captain.email, 
+                team_id: captain.team_id, 
+                role: "captain" 
+            }
         });
     } catch (err) {
         console.error("❌ Captain login error:", err.message);

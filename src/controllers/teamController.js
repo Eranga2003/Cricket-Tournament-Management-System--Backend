@@ -6,12 +6,16 @@ const { uploadImage } = require("../services/storageService"); // Added storage 
 
 exports.registerTeam = async (req, res) => {
   try {
-    const { captain_id, team_name, team_email, password, location } = req.body;
+    const { captain_id, team_name, username, team_email, password, location } = req.body;
     let { logo_url } = req.body;
     
-    if (!captain_id || !team_name || !team_email || !password) {
-      return res.status(400).json({ msg: "captain_id, team_name, team_email, and password strictly required natively" });
+    if (!captain_id || !team_name || !username || !team_email || !password) {
+      return res.status(400).json({ msg: "captain_id, team_name, username, team_email, and password strictly required natively" });
     }
+
+    // Check if username already exists
+    const userSnapshot = await db.collection("teams").where("username", "==", username).get();
+    if (!userSnapshot.empty) return res.status(400).json({ msg: "Username already in use by another team" });
 
     // Handle image upload to Supabase if a file exists
     if (req.file) {
@@ -28,6 +32,7 @@ exports.registerTeam = async (req, res) => {
     
     const team = await createTeam({
       team_email,
+      username,
       password_hash: hashedPassword,
       captain_id,
       team_name,
@@ -48,10 +53,12 @@ exports.registerTeam = async (req, res) => {
 
 exports.loginTeam = async (req, res) => {
   try {
-    const { team_email, password } = req.body;
-    if (!team_email || !password) return res.status(400).json({ msg: "Both credentials intensely required" });
+    const { username, password } = req.body;
+    if (!username || !password) return res.status(400).json({ msg: "Username and password strictly required" });
 
-    const snapshot = await db.collection("teams").where("team_email", "==", team_email).get();
+    // Check only username
+    let snapshot = await db.collection("teams").where("username", "==", username).get();
+
     if (snapshot.empty) return res.status(400).json({ msg: "Invalid Team credentials" });
 
     const teamDoc = snapshot.docs[0];
@@ -69,7 +76,13 @@ exports.loginTeam = async (req, res) => {
     res.json({
       msg: "Team Authentication Successful!",
       token,
-      team: { id: teamDoc.id, team_name: teamData.team_name, team_email: teamData.team_email }
+      team: { 
+          id: teamDoc.id, 
+          team_name: teamData.team_name, 
+          username: teamData.username,
+          team_email: teamData.team_email,
+          role: "team"
+      }
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

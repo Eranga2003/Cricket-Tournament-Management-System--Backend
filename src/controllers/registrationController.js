@@ -9,32 +9,43 @@ const { getTeamById } = require("../models/teamModel");
 
 exports.applyTournament = async (req, res) => {
   try {
-    // 🔥 NEW REQUIREMENT: Reject Captain Tokens! MUST be a Team Token!
-    if (req.user.role !== "team") {
-       return res.status(403).json({ msg: "Forbidden Pipeline Guard: You explicitly must login via /api/teams/login and use the Team Token to submit an application natively." });
+    // 🔥 UPDATED: Allow both Captains and Team-Accounts to apply natively
+    if (req.user.role !== "team" && req.user.role !== "captain") {
+       return res.status(403).json({ msg: "Forbidden role access: Only Captains or Teams can submit applications." });
     }
-    const team_id = req.user.id; // Securely enforced via Team JWT extraction
-    
-    // Notice we removed team_id from frontend body since it's securely tracked via Token.
-    const { tournament_id, selected_players } = req.body;
+
+    const { tournament_id, selected_players, team_name, contact_number, payment_done } = req.body;
+    let team_id = req.user.id;
+    let captain_id = req.user.id;
+
+    // Logic: If user is Captain, find their team_id dynamically
+    if (req.user.role === "captain") {
+       const snapshot = await db.collection("teams").where("captain_id", "==", req.user.id).get();
+       if (snapshot.empty) return res.status(404).json({ msg: "You must build a Squad Profile first before applying to tournaments." });
+       team_id = snapshot.docs[0].id;
+    } else {
+       // If user is Team role, find the captain_id
+       const teamData = await getTeamById(team_id);
+       if (!teamData) return res.status(404).json({ msg: "Corrupted Team Identity System Error" });
+       captain_id = teamData.captain_id;
+    }
 
     if (!tournament_id) {
       return res.status(400).json({ msg: "tournament_id is required" });
     }
 
-    // Safely dynamically pull the associated Captain ID directly from the Team DB Account
-    const teamData = await getTeamById(team_id);
-    if (!teamData) return res.status(404).json({ msg: "Corrupted Team Identity System Error" });
-
     const registration = await applyForTournament({
       tournament_id,
       team_id,
-      captain_id: teamData.captain_id, // Automatically dynamically binds the original Captain to keep /my endpoint completely operational!
-      selected_players: selected_players || []
+      team_name: team_name || "Unknown Team",
+      contact_number: contact_number || "N/A",
+      captain_id,
+      selected_players: selected_players || [],
+      payment_status: payment_done ? "paid" : "pending"
     });
 
-    console.log(`📋 Secure Team Account applied for Tournament ${tournament_id}`);
-    res.json({ msg: "Team Account successfully firmly recorded its application!", registration });
+    console.log(`📋 Tournament Application recorded for Team: ${team_name}`);
+    res.json({ msg: "Application successful!", registration });
 
   } catch (err) {
     console.error("❌ Apply tournament error:", err.message);

@@ -8,10 +8,12 @@ const applyForTournament = async (data) => {
     const registrationData = {
         tournament_id: data.tournament_id,
         team_id: data.team_id,
+        team_name: data.team_name, // Store team name for fast organizer lookups
+        contact_number: data.contact_number, // Store mobile contact summary
         captain_id: data.captain_id,
         selected_players: data.selected_players || [],
         status: "pending", // pending, approved, arrived, rejected
-        payment_status: "pending",
+        payment_status: data.payment_status || "pending", // Capture initial payment status
         qr_code: null,
         created_at: new Date()
     };

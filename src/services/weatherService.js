@@ -97,7 +97,11 @@ const getWeatherByLocation = async (location, date) => {
     };
 
   } catch (err) {
-    console.error("❌ Weather API Error:", err.message);
+    if (err.code === "ECONNRESET") {
+      console.warn("⚠️ Weather API Connection Reset (ECONNRESET). This is usually a temporary network issue.");
+    } else {
+      console.error("❌ Weather API Error:", err.message);
+    }
     return null;
   }
 };
