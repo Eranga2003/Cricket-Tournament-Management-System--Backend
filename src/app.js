@@ -93,4 +93,41 @@ app.use("/api/scoring", require("./routes/scoringRoutes"));
 
 console.log("📌 Route initialization complete");
 
+// Global Error Handler
+app.use((err, req, res, next) => {
+  // Handle Multer errors
+  if (err.code === "LIMIT_FILE_SIZE") {
+    return res.status(400).json({
+      success: false,
+      message: "File too large. Maximum limit is 25MB.",
+      error: "MulterError: LIMIT_FILE_SIZE"
+    });
+  }
+
+  if (err.code === "LIMIT_UNEXPECTED_FILE") {
+    return res.status(400).json({
+      success: false,
+      message: "Unexpected file field or too many files.",
+      error: "MulterError: LIMIT_UNEXPECTED_FILE"
+    });
+  }
+
+  // Handle other potential Multer errors
+  if (err.name === "MulterError") {
+    return res.status(400).json({
+      success: false,
+      message: err.message,
+      error: err.code
+    });
+  }
+
+  // Fallback for other errors
+  console.error("❌ Unhandled Error:", err);
+  res.status(err.status || 500).json({
+    success: false,
+    message: err.message || "Internal Server Error",
+    error: process.env.NODE_ENV === "development" ? err : {}
+  });
+});
+
 module.exports = app;

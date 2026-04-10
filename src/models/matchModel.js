@@ -18,6 +18,8 @@ const initializeMatches = async (tournament_id, total_matches) => {
       team2_id: null,
       winner_team_id: null,
       status: "scheduled", // scheduled, live, completed
+      total_overs: 10, // Default 10 overs
+      balls_per_over: 6, // Default 6 balls
       is_final,
       created_at: new Date()
     };
@@ -44,10 +46,15 @@ const getTourneyMatches = async (tournament_id) => {
 };
 
 // Update teams for a match
-const assignTeams = async (match_id, team1_id, team2_id) => {
+const assignTeams = async (match_id, team1_id, team2_id, team1_name, team2_name) => {
   const matchRef = db.collection(COLLECTION_NAME).doc(match_id);
-  await matchRef.update({ team1_id, team2_id });
-  return { id: match_id, team1_id, team2_id };
+  await matchRef.update({ 
+    team1_id, 
+    team2_id,
+    team1_name: team1_name || "Team 1",
+    team2_name: team2_name || "Team 2"
+  });
+  return { id: match_id, team1_id, team2_id, team1_name, team2_name };
 };
 
 // Declare a formally completed match's winner
@@ -60,9 +67,31 @@ const setMatchWinner = async (match_id, winner_team_id) => {
   return { id: match_id, winner_team_id, status: "completed" };
 };
 
+// Create a single match manually (Ad-Hoc)
+const createAdHocMatch = async (data) => {
+  const matchRef = db.collection(COLLECTION_NAME).doc();
+  const matchData = {
+    tournament_id: data.tournament_id,
+    match_number: data.match_number || 1,
+    team1_id: data.team1_id,
+    team2_id: data.team2_id,
+    team1_name: data.team1_name,
+    team2_name: data.team2_name,
+    status: "scheduled",
+    total_overs: data.total_overs || 10,
+    balls_per_over: data.balls_per_over || 6,
+    is_final: data.is_final || false,
+    created_at: new Date()
+  };
+  await matchRef.set(matchData);
+  return { id: matchRef.id, ...matchData };
+};
+
 module.exports = {
   initializeMatches,
   getTourneyMatches,
   assignTeams,
-  setMatchWinner
+  setMatchWinner,
+  createAdHocMatch
 };
+

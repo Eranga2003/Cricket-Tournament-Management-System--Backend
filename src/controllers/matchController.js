@@ -2,7 +2,8 @@ const {
   initializeMatches,
   getTourneyMatches,
   assignTeams,
-  setMatchWinner
+  setMatchWinner,
+  createAdHocMatch
 } = require("../models/matchModel");
 const { db } = require("../config/firebase");
 
@@ -34,14 +35,14 @@ exports.setupSchedule = async (req, res) => {
 exports.slotTeams = async (req, res) => {
   try {
     const { match_id } = req.params;
-    const { team1_id, team2_id } = req.body;
+    const { team1_id, team2_id, team1_name, team2_name } = req.body;
 
     const matchSnap = await db.collection("matches").doc(match_id).get();
     if (!matchSnap.exists) return res.status(404).json({ msg: "Match completely missing" });
 
     await verifyOrganizer(matchSnap.data().tournament_id, req.user.id);
 
-    const updated = await assignTeams(match_id, team1_id, team2_id);
+    const updated = await assignTeams(match_id, team1_id, team2_id, team1_name, team2_name);
     res.json({ msg: "Teams elegantly assigned to the match!", match: updated });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -75,6 +76,89 @@ exports.getSchedule = async (req, res) => {
     const { tournament_id } = req.params;
     const matches = await getTourneyMatches(tournament_id);
     res.json({ matches });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.getMatchById = async (req, res) => {
+  try {
+    const { match_id } = req.params;
+    const matchSnap = await db.collection("matches").doc(match_id).get();
+    
+    if (!matchSnap.exists) {
+      return res.status(404).json({ msg: "Match totally missing from the stadium records" });
+    }
+
+    const matchData = matchSnap.data();
+    
+    // Joint Fetch: Check for dedicated live score across dual-innings architecture
+    let live_score = matchData.live_score || null;
+    try {
+        // Resolve the active innings ID: Priority 1: Pointer, P2: Innings 1 Suffix, P3: Legacy Match ID
+        const activeLSId = matchData.current_innings_id || `${matchId}_inn1`;
+        
+        let lsSnap = await db.collection("live_scores").doc(activeLSId).get();
+        
+        // Final fallback: Check for legacy absolute ID if the others are missing
+        if (!lsSnap.exists && activeLSId !== matchId) {
+            lsSnap = await db.collection("live_scores").doc(matchId).get();
+        }
+
+        if (lsSnap.exists) {
+            live_score = lsSnap.data();
+        }
+    } catch (err) {
+        console.warn("Live score synchronization bridge failed:", err);
+    }
+
+    
+    // Enrich with Team Names (Prioritize stored names, fallback to lookups)
+    let team1_name = matchData.team1_name || "Team 1";
+    let team2_name = matchData.team2_name || "Team 2";
+
+    if (matchData.team1_id && (!matchData.team1_name || matchData.team1_name === "Team 1")) {
+        const t1Snap = await db.collection("teams").doc(matchData.team1_id).get();
+        if (t1Snap.exists) team1_name = t1Snap.data().name;
+    }
+    if (matchData.team2_id && (!matchData.team2_name || matchData.team2_name === "Team 2")) {
+        const t2Snap = await db.collection("teams").doc(matchData.team2_id).get();
+        if (t2Snap.exists) team2_name = t2Snap.data().name;
+    }
+
+    res.json({ 
+        match: { 
+            id: matchSnap.id, 
+            ...matchData,
+            live_score, // Unified scoring object
+            team1_name,
+            team2_name
+        } 
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+exports.createMatch = async (req, res) => {
+  try {
+    const { tournament_id, team1_id, team2_id, team1_name, team2_name, match_number } = req.body;
+    
+    if (!tournament_id || !team1_id || !team2_id) {
+      return res.status(400).json({ msg: "Missing critical match data (Tournament or Teams)" });
+    }
+
+    await verifyOrganizer(tournament_id, req.user.id);
+
+    const match = await createAdHocMatch({
+      tournament_id,
+      team1_id,
+      team2_id,
+      team1_name,
+      team2_name,
+      match_number
+    });
+
+    res.status(201).json({ msg: "Battle formally established!", match });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

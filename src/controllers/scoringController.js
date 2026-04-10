@@ -1,8 +1,12 @@
 const {
   startMatchInnings,
+  updateBattingOrder,
   processBall,
   swapBatsman,
-  swapBowler
+  swapBowler,
+  reverseBall,
+  resetMatchInnings,
+  switchInnings
 } = require("../models/scoringModel");
 const { db } = require("../config/firebase");
 
@@ -22,18 +26,42 @@ exports.startInnings = async (req, res) => {
     const { match_id } = req.params;
     await verifyMatchOrganizer(match_id, req.user.id);
     
-    // Explicitly mapping team components as requested
-    const { batting_team_id, bowling_team_id, striker_id, non_striker_id, bowler_id } = req.body;
+    const { 
+      batting_team_id, 
+      bowling_team_id, 
+      striker_id, 
+      non_striker_id, 
+      bowler_id,
+      total_overs,
+      balls_per_over,
+      batting_order
+    } = req.body;
 
     const liveScore = await startMatchInnings(match_id, {
       batting_team_id,
       bowling_team_id,
       striker_id,
       non_striker_id,
-      bowler_id
+      bowler_id,
+      total_overs,
+      balls_per_over,
+      batting_order
     });
 
     res.json({ msg: "Innings permanently started!", liveScore });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.setBattingOrder = async (req, res) => {
+  try {
+    const { match_id } = req.params;
+    await verifyMatchOrganizer(match_id, req.user.id);
+    
+    const { batting_order } = req.body;
+    const order = await updateBattingOrder(match_id, batting_order);
+    res.json({ msg: "Batting order updated!", batting_order: order });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -44,9 +72,9 @@ exports.recordBall = async (req, res) => {
     const { match_id } = req.params;
     await verifyMatchOrganizer(match_id, req.user.id);
 
-    const { runs, is_wicket, extra_type } = req.body;
+    const { runs, is_wicket, extra_type, out_batsman_id } = req.body;
     
-    const liveScore = await processBall(match_id, { runs, is_wicket, extra_type });
+    const liveScore = await processBall(match_id, { runs, is_wicket, extra_type, out_batsman_id });
 
     res.json({ msg: "Ball actively processed!", liveScore });
   } catch (err) {
@@ -75,6 +103,42 @@ exports.changeBowler = async (req, res) => {
     const { new_bowler_id } = req.body;
     const liveScore = await swapBowler(match_id, new_bowler_id);
     res.json({ msg: "Bowler firmly changed natively!", liveScore });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.undoLastBall = async (req, res) => {
+  try {
+    const { match_id } = req.params;
+    await verifyMatchOrganizer(match_id, req.user.id);
+    
+    const liveScore = await reverseBall(match_id);
+    res.json({ msg: "Last ball elegantly reverted!", liveScore });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.restartMatch = async (req, res) => {
+  try {
+    const { match_id } = req.params;
+    await verifyMatchOrganizer(match_id, req.user.id);
+    
+    const liveScore = await resetMatchInnings(match_id);
+    res.json({ msg: "Match reset and restarted from ball zero!", liveScore });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.transitionInnings = async (req, res) => {
+  try {
+    const { match_id } = req.params;
+    await verifyMatchOrganizer(match_id, req.user.id);
+    
+    const liveScore = await switchInnings(match_id);
+    res.json({ msg: "Innings swapped! Team B is now batting.", liveScore });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
