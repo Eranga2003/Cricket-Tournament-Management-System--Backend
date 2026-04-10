@@ -1,7 +1,8 @@
 const express = require("express");
 const router = express.Router();
-const { registerOrganizer, listOrganizers, loginOrganizer } = require("../controllers/organizerController");
-const upload = require("../middleware/upload"); // Added upload middleware
+const { registerOrganizer, listOrganizers, loginOrganizer, getOrganizerProfile } = require("../controllers/organizerController");
+const { verifyToken } = require("../middleware/authMiddleware");
+const upload = require("../middleware/upload");
 
 // Register
 router.post("/register", upload.single("logo"), registerOrganizer);
@@ -9,7 +10,10 @@ router.post("/register", upload.single("logo"), registerOrganizer);
 // Login
 router.post("/login", loginOrganizer);
 
-// List organizers (optional, admin only)
+// Profile
+router.get("/profile", verifyToken, getOrganizerProfile);
+
+// List organizers
 router.get("/", listOrganizers);
 
 module.exports = router;

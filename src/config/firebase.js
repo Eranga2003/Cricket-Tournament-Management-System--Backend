@@ -12,15 +12,26 @@ try {
       storageBucket: "cricket-tournament-management.firebasestorage.app",
     });
     firebaseInitialized = true;
-    console.log("✅ Firebase initialized with service account");
+    console.log("✅ Firebase initialized successfully with service account");
+    console.log(`📌 Project ID: ${serviceAccount.project_id}`);
   }
 
   db = admin.firestore();
-  bucket = admin.storage ? admin.storage().bucket() : null;
+  
+  // Storage bucket initialization
+  try {
+    bucket = admin.storage().bucket();
+  } catch (storageErr) {
+    console.warn("⚠️  Firebase Storage initialization failed:", storageErr.message);
+    bucket = null;
+  }
 
 } catch (err) {
   console.warn("⚠️  Firebase initialization failed:", err.message);
-  console.log("📝 Using mock database mode for development");
+  if (err.message.includes("16 UNAUTHENTICATED")) {
+    console.error("❌ CRITICAL: Firebase Authentication failed. Please check your serviceAccountKey.json and Google Cloud project permissions.");
+  }
+  console.log("📝 Falling back to Mock Database mode for development");
 
   // Create an in-memory storage for the mock database
   const mockStorage = {};

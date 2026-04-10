@@ -1,11 +1,16 @@
 const { 
   applyForTournament, 
+  getRegistrationById,
   getRegistrationsByTournament, 
   getRegistrationsByCaptain, 
+  getRegistrationsByTeam,
+  getRegistrationsByOrganizer,
   updateRegistrationStatus,
   verifyAndScanRegistration
 } = require("../models/registrationModel");
 const { getTeamById } = require("../models/teamModel");
+const { getTournamentById } = require("../models/tournamentModel");
+const { db } = require("../config/firebase");
 
 exports.applyTournament = async (req, res) => {
   try {
@@ -34,8 +39,15 @@ exports.applyTournament = async (req, res) => {
       return res.status(400).json({ msg: "tournament_id is required" });
     }
 
+    // Fetch tournament to get organizer_id
+    const tournament = await getTournamentById(tournament_id);
+    if (!tournament) {
+      return res.status(404).json({ msg: "Tournament not found" });
+    }
+
     const registration = await applyForTournament({
       tournament_id,
+      organizer_id: tournament.organizer_id, // Store organizer ID for easier dashboard queries
       team_id,
       team_name: team_name || "Unknown Team",
       contact_number: contact_number || "N/A",
@@ -65,10 +77,32 @@ exports.getTournamentRegistrations = async (req, res) => {
 
 exports.getMyRegistrations = async (req, res) => {
   try {
-    const captain_id = req.user.id; // This stays purely functionally tied to Captains querying their profile arrays!
-    const registrations = await getRegistrationsByCaptain(captain_id);
-    res.json({ registrations });
+    const userId = req.user.id;
+    const role = req.user.role;
+    
+    let registrations = [];
+    if (role === "team") {
+        registrations = await getRegistrationsByTeam(userId);
+    } else {
+        registrations = await getRegistrationsByCaptain(userId);
+    }
+
+    // 🔥 ENHANCEMENT: Join tournament details (name, date, status) for the frontend view
+    const enriched = await Promise.all(registrations.map(async (reg) => {
+        const tournamentDoc = await db.collection("tournaments").doc(reg.tournament_id).get();
+        const tournamentData = tournamentDoc.exists ? tournamentDoc.data() : {};
+        
+        return {
+            ...reg,
+            tournament_name: tournamentData.name || "Unknown Tournament",
+            tournament_date: tournamentData.date_time || "N/A",
+            tournament_location: tournamentData.location || "N/A"
+        };
+    }));
+
+    res.json({ registrations: enriched });
   } catch (err) {
+    console.error("❌ Get my registrations error:", err.message);
     res.status(500).json({ error: err.message });
   }
 };
@@ -84,7 +118,24 @@ exports.approveOrReject = async (req, res) => {
 
     let qr_code = null;
     if (status === "approved") {
-      qr_code = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=REG-${id}`;
+      const regData = await getRegistrationById(id);
+      if (regData) {
+        const tourneySnap = await db.collection("tournaments").doc(regData.tournament_id).get();
+        const tourneyName = tourneySnap.exists ? tourneySnap.data().name : "Unknown Tournament";
+        
+        const payload = JSON.stringify({
+          reg_id: id,
+          team: regData.team_name,
+          tournament: tourneyName,
+          contact: regData.contact_number,
+          v: "1.0"
+        });
+        
+        qr_code = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(payload)}`;
+      } else {
+        // Fallback for missing record (shouldn't happen)
+        qr_code = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=REG-${id}`;
+      }
     }
 
     const updated = await updateRegistrationStatus(id, status, qr_code);
@@ -98,11 +149,23 @@ exports.approveOrReject = async (req, res) => {
 exports.scanQRCode = async (req, res) => {
   try {
     const { qr_data } = req.body; 
-    if (!qr_data || !qr_data.startsWith("REG-")) {
-      return res.status(400).json({ msg: "Invalid QR System format natively. Expected 'REG-xxxx'" });
+    if (!qr_data) return res.status(400).json({ msg: "No QR data provided" });
+
+    let registrationId;
+
+    if (qr_data.startsWith("{") || qr_data.includes('"reg_id"')) {
+      try {
+          const parsed = JSON.parse(qr_data);
+          registrationId = parsed.reg_id;
+      } catch (e) {
+          return res.status(400).json({ msg: "Malformed JSON QR data" });
+      }
+    } else if (qr_data.startsWith("REG-")) {
+      registrationId = qr_data.split("REG-")[1];
+    } else {
+      return res.status(400).json({ msg: "Invalid QR System format natively. Expected JSON or 'REG-xxxx'" });
     }
     
-    const registrationId = qr_data.split("REG-")[1];
     const organizerId = req.user.id; 
 
     const scannedReg = await verifyAndScanRegistration(registrationId, organizerId);
@@ -111,5 +174,33 @@ exports.scanQRCode = async (req, res) => {
     res.json({ msg: "Team arrived properly! Gate securely unlocked.", registration: scannedReg });
   } catch(err) {
     res.status(400).json({ error: err.message });
+  }
+};
+
+exports.getOrganizerRegistrations = async (req, res) => {
+  try {
+    const organizer_id = req.user.id;
+    const registrations = await getRegistrationsByOrganizer(organizer_id);
+    
+    // Enrich with tournament and team details
+    const enriched = await Promise.all(registrations.map(async (reg) => {
+        // Fetch tournament name
+        const tournamentDoc = await db.collection("tournaments").doc(reg.tournament_id).get();
+        const tournamentData = tournamentDoc.exists ? tournamentDoc.data() : {};
+        
+        // Fetch team logo
+        const teamDoc = await db.collection("teams").doc(reg.team_id).get();
+        const teamData = teamDoc.exists ? teamDoc.data() : {};
+        
+        return {
+            ...reg,
+            tournament_name: tournamentData.name || "Unknown Tournament",
+            team_logo: teamData.logo_url || null
+        };
+    }));
+
+    res.json({ registrations: enriched });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 };

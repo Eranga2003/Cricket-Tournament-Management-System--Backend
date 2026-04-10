@@ -53,15 +53,33 @@ app.get("/", (req, res) => res.send("API Running 🚀"));
 // DB Health Check Route
 app.get("/api/test-db", async (req, res) => {
   try {
-    const { firebaseInitialized, db } = require("./src/config/firebase");
+    const { firebaseInitialized, db } = require("./config/firebase");
+    
     if (!firebaseInitialized) {
-      return res.status(500).json({ status: "error", message: "Firebase not initialized" });
+      return res.status(200).json({ 
+        status: "warning", 
+        message: "Firebase is running in MOCK mode. Real Firestore is not connected.",
+        details: { initialized: false } 
+      });
     }
+
     // Try a simple read to confirm connection
     await db.collection("captains").limit(1).get();
-    res.json({ status: "success", message: "Firebase connection is healthy", details: { initialized: true } });
+    res.json({ 
+      status: "success", 
+      message: "Firebase connection is healthy and authenticated.", 
+      details: { initialized: true, mode: "real" } 
+    });
   } catch (err) {
-    res.status(500).json({ status: "error", message: err.message });
+    console.error("❌ Health check failed:", err.message);
+    res.status(500).json({ 
+      status: "error", 
+      message: err.message,
+      code: err.code || "UNKNOWN",
+      hint: err.message.includes("16 UNAUTHENTICATED") 
+        ? "Your service account credentials or project permissions are invalid." 
+        : "Check server logs for more details."
+    });
   }
 });
 

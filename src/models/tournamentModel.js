@@ -69,8 +69,18 @@ const getTournamentsByOrganizer = async (organizer_id) => {
     return tournaments;
 };
 
+// ===============================
+// GET TOURNAMENT BY ID
+// ===============================
+const getTournamentById = async (id) => {
+    const doc = await db.collection("tournaments").doc(id).get();
+    if (!doc.exists) return null;
+    return { id: doc.id, ...doc.data() };
+};
+
 module.exports = {
     createTournament,
     getAllTournaments,
-    getTournamentsByOrganizer
+    getTournamentsByOrganizer,
+    getTournamentById
 };

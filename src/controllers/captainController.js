@@ -55,6 +55,19 @@ exports.registerCaptain = async (req, res) => {
     }
 };
 
+exports.getCaptainProfile = async (req, res) => {
+    try {
+        const id = req.user.id;
+        const doc = await db.collection("captains").doc(id).get();
+        if (!doc.exists) return res.status(404).json({ msg: "Captain not found" });
+        const data = doc.data();
+        delete data.password_hash;
+        res.json({ id: doc.id, ...data, role: "captain" });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
 // ===============================
 // LOGIN CAPTAIN
 // ===============================

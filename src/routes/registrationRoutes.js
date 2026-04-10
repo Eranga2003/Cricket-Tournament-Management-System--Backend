@@ -6,6 +6,7 @@ const {
     applyTournament,
     getTournamentRegistrations,
     getMyRegistrations,
+    getOrganizerRegistrations,
     approveOrReject,
     scanQRCode
 } = require("../controllers/registrationController");
@@ -18,6 +19,9 @@ router.get("/my", verifyToken, getMyRegistrations);
 
 // Organizer views requests for a specific tournament
 router.get("/tournament/:id", verifyToken, getTournamentRegistrations);
+
+// Organizer views all team applications for their tournaments
+router.get("/organizer", verifyToken, getOrganizerRegistrations);
 
 // Organizer approves / rejects a registration
 router.put("/:id/status", verifyToken, approveOrReject);

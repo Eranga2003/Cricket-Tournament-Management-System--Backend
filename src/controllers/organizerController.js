@@ -1,11 +1,8 @@
-const { db } = require("../config/firebase"); // Firebase admin import
+const { db } = require("../config/firebase"); 
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const { uploadImage } = require("../services/storageService"); // Added storage service
+const { uploadImage } = require("../services/storageService");
 
-// ===============================
-// Register a new Organizer
-// ===============================
 exports.registerOrganizer = async (req, res) => {
   try {
     const { org_name, email, phone, password, sponsors } = req.body;
@@ -15,18 +12,14 @@ exports.registerOrganizer = async (req, res) => {
       return res.status(400).json({ msg: "org_name, email, phone, and password are required" });
     }
 
-    // Handle image upload to Supabase if a file exists
     if (req.file) {
       try {
         logo = await uploadImage(req.file);
-        console.log(`✅ Organizer Logo uploaded to Supabase: ${logo}`);
       } catch (uploadErr) {
-        console.error("❌ Failed to upload image to Supabase:", uploadErr.message);
         return res.status(500).json({ msg: "Error uploading image to Supabase", error: uploadErr.message });
       }
     }
 
-    // Check if organizer already exists
     const existing = await db.collection("organizers").where("email", "==", email).get();
     if (!existing.empty) {
       return res.status(400).json({ msg: "Organizer with this email already exists" });
@@ -49,21 +42,15 @@ exports.registerOrganizer = async (req, res) => {
 
     await organizerRef.set(organizerData);
 
-    console.log(`🎉 Organizer Created: ${org_name} (${email})`);
-
     res.json({
       msg: "Organizer registered successfully",
       organizer: { id: organizerRef.id, ...organizerData },
     });
   } catch (err) {
-    console.error("❌ Organizer registration error:", err);
     res.status(500).json({ error: err.message });
   }
 };
 
-// ===============================
-// List all Organizers
-// ===============================
 exports.listOrganizers = async (req, res) => {
   try {
     const snapshot = await db.collection("organizers").get();
@@ -74,14 +61,10 @@ exports.listOrganizers = async (req, res) => {
 
     res.json({ organizers });
   } catch (err) {
-    console.error("❌ List organizers error:", err.message);
     res.status(500).json({ error: err.message });
   }
 };
 
-// ===============================
-// Login Organizer
-// ===============================
 exports.loginOrganizer = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -96,7 +79,6 @@ exports.loginOrganizer = async (req, res) => {
     const isMatch = await bcrypt.compare(password, organizer.password);
     if (!isMatch) return res.status(400).json({ msg: "Invalid credentials" });
 
-    // JWT Token
     const token = jwt.sign(
       { id: organizerDoc.id, role: "organizer" },
       process.env.JWT_SECRET || "secret",
@@ -114,7 +96,19 @@ exports.loginOrganizer = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("❌ Organizer login error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.getOrganizerProfile = async (req, res) => {
+  try {
+    const id = req.user.id;
+    const doc = await db.collection("organizers").doc(id).get();
+    if (!doc.exists) return res.status(404).json({ msg: "Organizer not found" });
+    const data = doc.data();
+    delete data.password;
+    res.json({ id: doc.id, ...data, role: "organizer" });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
