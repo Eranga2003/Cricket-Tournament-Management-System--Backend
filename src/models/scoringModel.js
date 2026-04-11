@@ -115,6 +115,7 @@ const switchInnings = async (match_id, data = {}) => {
     innings1_history: ls1.ball_history || [],
     innings1_player_stats: ls1.player_stats || {}, 
     innings1_wickets_list: ls1.wickets_list || [],
+    innings1_team_id: ls1.batting_team_id,
     innings_complete: false,
     last_updated: new Date()
   };
@@ -359,6 +360,46 @@ const resetMatchInnings = async (match_id) => {
   return ls;
 };
 
+const archiveFinalMatchReport = async (match_id) => {
+  const matchRef = db.collection(MATCHES_COL).doc(match_id);
+  const matchSnap = await matchRef.get();
+  if (!matchSnap.exists) throw new Error("Match not found");
+  const matchData = matchSnap.data();
+
+  const inn1_id = `${match_id}_inn1`;
+  const inn2_id = `${match_id}_inn2`;
+
+  const inn1Snap = await db.collection(LIVE_SCORES_COL).doc(inn1_id).get();
+  const inn2Snap = await db.collection(LIVE_SCORES_COL).doc(inn2_id).get();
+
+  const report = {
+    match_id,
+    tournament_id: matchData.tournament_id,
+    match_details: matchData,
+    innings1: inn1Snap.exists ? inn1Snap.data() : null,
+    innings2: inn2Snap.exists ? inn2Snap.data() : null,
+    archived_at: new Date(),
+    summary: matchData.match_summary || "Match completed",
+    winner_team_id: matchData.winner_team_id || null,
+    mvps: {
+        best_batsman_id: matchData.best_batsman_id || null,
+        best_bowler_id: matchData.best_bowler_id || null
+    }
+  };
+
+  // Securely store the final record
+  await db.collection("completed_match_reports").doc(match_id).set(report);
+
+  // Update original match doc
+  await matchRef.update({
+    status: "completed",
+    is_archived: true,
+    archived_at: new Date()
+  });
+
+  return report;
+};
+
 module.exports = {
   startMatchInnings,
   updateBattingOrder,
@@ -367,5 +408,6 @@ module.exports = {
   swapBowler,
   reverseBall,
   resetMatchInnings,
-  switchInnings
+  switchInnings,
+  archiveFinalMatchReport
 };

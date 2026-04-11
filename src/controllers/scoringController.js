@@ -6,7 +6,8 @@ const {
   swapBowler,
   reverseBall,
   resetMatchInnings,
-  switchInnings
+  switchInnings,
+  archiveFinalMatchReport
 } = require("../models/scoringModel");
 const { db } = require("../config/firebase");
 
@@ -147,6 +148,38 @@ exports.transitionInnings = async (req, res) => {
     });
     
     res.json({ msg: "Innings swapped! Team B is now batting.", liveScore });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.finalizeMatchSummary = async (req, res) => {
+  try {
+    const { match_id } = req.params;
+    await verifyMatchOrganizer(match_id, req.user.id);
+    
+    const report = await archiveFinalMatchReport(match_id);
+    res.json({ msg: "Match successfully archived and finalized!", report });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.getArchivedReports = async (req, res) => {
+  try {
+    const snap = await db.collection("completed_match_reports").orderBy("archived_at", "desc").get();
+    const reports = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    res.json({ reports });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.getLiveMatches = async (req, res) => {
+  try {
+    const snap = await db.collection("matches").where("status", "==", "live").get();
+    const matches = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    res.json({ matches });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

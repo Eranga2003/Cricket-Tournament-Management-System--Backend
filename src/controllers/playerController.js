@@ -92,3 +92,14 @@ exports.getPlayersByTeam = async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 };
+
+exports.getPlayerById = async (req, res) => {
+    try {
+        const { player_id } = req.params;
+        const pSnap = await db.collection("players").doc(player_id).get();
+        if (!pSnap.exists) return res.status(404).json({ msg: "Player not found" });
+        res.json({ id: pSnap.id, ...pSnap.data() });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
