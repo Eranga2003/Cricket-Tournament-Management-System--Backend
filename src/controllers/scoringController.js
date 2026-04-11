@@ -137,9 +137,18 @@ exports.transitionInnings = async (req, res) => {
     const { match_id } = req.params;
     await verifyMatchOrganizer(match_id, req.user.id);
     
-    const liveScore = await switchInnings(match_id);
+    const { striker_id, non_striker_id, bowler_id, batting_order } = req.body;
+    
+    const liveScore = await switchInnings(match_id, {
+      striker_id,
+      non_striker_id,
+      bowler_id,
+      batting_order
+    });
+    
     res.json({ msg: "Innings swapped! Team B is now batting.", liveScore });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
+

@@ -96,13 +96,13 @@ exports.getMatchById = async (req, res) => {
     let live_score = matchData.live_score || null;
     try {
         // Resolve the active innings ID: Priority 1: Pointer, P2: Innings 1 Suffix, P3: Legacy Match ID
-        const activeLSId = matchData.current_innings_id || `${matchId}_inn1`;
+        const activeLSId = matchData.current_innings_id || `${match_id}_inn1`;
         
         let lsSnap = await db.collection("live_scores").doc(activeLSId).get();
         
         // Final fallback: Check for legacy absolute ID if the others are missing
-        if (!lsSnap.exists && activeLSId !== matchId) {
-            lsSnap = await db.collection("live_scores").doc(matchId).get();
+        if (!lsSnap.exists && activeLSId !== match_id) {
+            lsSnap = await db.collection("live_scores").doc(match_id).get();
         }
 
         if (lsSnap.exists) {
@@ -113,17 +113,25 @@ exports.getMatchById = async (req, res) => {
     }
 
     
-    // Enrich with Team Names (Prioritize stored names, fallback to lookups)
+    // Enrich with Team Names & Logos (Prioritize stored names, fallback to lookups)
     let team1_name = matchData.team1_name || "Team 1";
     let team2_name = matchData.team2_name || "Team 2";
+    let team1_logo = matchData.team1_logo || "";
+    let team2_logo = matchData.team2_logo || "";
 
-    if (matchData.team1_id && (!matchData.team1_name || matchData.team1_name === "Team 1")) {
+    if (matchData.team1_id && (!matchData.team1_logo || team1_logo === "")) {
         const t1Snap = await db.collection("teams").doc(matchData.team1_id).get();
-        if (t1Snap.exists) team1_name = t1Snap.data().name;
+        if (t1Snap.exists) {
+            team1_name = t1Snap.data().team_name || t1Snap.data().name || team1_name;
+            team1_logo = t1Snap.data().logo_url || "";
+        }
     }
-    if (matchData.team2_id && (!matchData.team2_name || matchData.team2_name === "Team 2")) {
+    if (matchData.team2_id && (!matchData.team2_logo || team2_logo === "")) {
         const t2Snap = await db.collection("teams").doc(matchData.team2_id).get();
-        if (t2Snap.exists) team2_name = t2Snap.data().name;
+        if (t2Snap.exists) {
+            team2_name = t2Snap.data().team_name || t2Snap.data().name || team2_name;
+            team2_logo = t2Snap.data().logo_url || "";
+        }
     }
 
     res.json({ 
@@ -132,7 +140,9 @@ exports.getMatchById = async (req, res) => {
             ...matchData,
             live_score, // Unified scoring object
             team1_name,
-            team2_name
+            team2_name,
+            team1_logo,
+            team2_logo
         } 
     });
   } catch (err) {

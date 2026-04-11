@@ -85,12 +85,8 @@ const startMatchInnings = async (match_id, data) => {
 };
 
 // Switch to Innings 2
-const switchInnings = async (match_id) => {
+const switchInnings = async (match_id, data = {}) => {
   const matchRef = db.collection(MATCHES_COL).doc(match_id);
-  const matchSnap = await matchRef.get();
-  const mData = matchSnap.data();
-
-  // Get Innings 1 for Target calculation
   const { data: ls1 } = await getActiveLiveScore(match_id);
   
   const inn2_id = `${match_id}_inn2`;
@@ -105,10 +101,10 @@ const switchInnings = async (match_id) => {
     bowling_team_id: ls1.batting_team_id,
     total_overs: ls1.total_overs,
     balls_per_over: ls1.balls_per_over,
-    batting_order: [], // Will be updated by organizer
-    striker_id: null,
-    non_striker_id: null,
-    bowler_id: null,
+    batting_order: data.batting_order || [],
+    striker_id: data.striker_id || (data.batting_order ? data.batting_order[0] : null),
+    non_striker_id: data.non_striker_id || (data.batting_order ? data.batting_order[1] : null),
+    bowler_id: data.bowler_id || null,
     total_runs: 0,
     total_wickets: 0,
     current_over: 0,
@@ -116,9 +112,18 @@ const switchInnings = async (match_id) => {
     wickets_list: [], 
     player_stats: {}, 
     ball_history: [],
+    innings1_history: ls1.ball_history || [],
+    innings1_player_stats: ls1.player_stats || {}, 
+    innings1_wickets_list: ls1.wickets_list || [],
     innings_complete: false,
     last_updated: new Date()
   };
+
+  if (data.batting_order) {
+    data.batting_order.forEach(pid => {
+      liveScore.player_stats[pid] = { runs: 0, balls: 0, wickets: 0, runs_conceded: 0, balls_bowled: 0 };
+    });
+  }
 
   await liveScoreRef.set(liveScore);
 
@@ -131,6 +136,7 @@ const switchInnings = async (match_id) => {
 
   return liveScore;
 };
+
 
 // --- Standard Operations (Modified to use the active ID automatically) ---
 
@@ -201,7 +207,9 @@ const processBall = async (match_id, ballData) => {
     ls.balls_in_over += 1;
     if (ls.balls_in_over >= ls.balls_per_over) {
       ls.current_over += 1; ls.balls_in_over = 0; ls.bowler_id = null;
-      if (ls.striker_id && ls.non_striker_id) { const temp = ls.striker_id; ls.striker_id = ls.non_striker_id; ls.non_striker_id = temp; }
+      // Always swap strikers at end of over to handle shift in bowling end
+      const temp = ls.striker_id; ls.striker_id = ls.non_striker_id; ls.non_striker_id = temp;
+      
       if (ls.current_over >= ls.total_overs) ls.innings_complete = true;
     }
   }
@@ -209,19 +217,110 @@ const processBall = async (match_id, ballData) => {
   if (ls.innings_number === 2 && ls.target_runs && ls.total_runs >= ls.target_runs) ls.innings_complete = true;
 
   ls.ball_history = ls.ball_history || [];
-  ls.ball_history.push({ over:ls.current_over, ball:ls.balls_in_over, runs, total_score:ls.total_runs, extra:extra_type, is_wicket, striker:ls.striker_id, bowler:ls.bowler_id, timestamp:new Date() });
-  if (ls.ball_history.length > 20) ls.ball_history.shift();
+  ls.ball_history.push({ 
+    over:ls.current_over, 
+    ball:ls.balls_in_over, 
+    runs, 
+    total_score:ls.total_runs, 
+    extra:extra_type, 
+    is_wicket, 
+    striker:ls.striker_id, 
+    nonStriker:ls.non_striker_id, 
+    bowler:ls.bowler_id, 
+    timestamp:new Date() 
+  });
+  // Removed shift() to preserve full history for analytics X-Y charts
+
+  // --- WINNER CONCLUSION LOGIC ---
+  if (ls.innings_complete) {
+    let winner_team_id = null;
+    let match_summary = "";
+
+    if (ls.innings_number === 2) {
+      const matchData = (await matchRef.get()).data();
+      const teamAName = matchData.team1_name || "Team A";
+      const teamBName = matchData.team2_name || "Team B";
+
+      if (ls.total_runs >= ls.target_runs) {
+        winner_team_id = ls.batting_team_id;
+        match_summary = `${teamBName} won by ${10 - ls.total_wickets} wickets!`;
+      } else {
+        winner_team_id = ls.bowling_team_id;
+        match_summary = `${teamAName} won by ${ls.target_runs - ls.total_runs - 1} runs!`;
+      }
+      
+      // --- MVP CALCULATION ---
+      let best_batsman_id = null;
+      let max_runs = -1;
+      let best_bowler_id = null;
+      let max_wickets = -1;
+
+      // Pool all players from both innings to find the ultimate match MVP
+      const combinedStats = {};
+      [ls.innings1_player_stats, ls.player_stats].forEach(ps => {
+          if (!ps) return;
+          Object.entries(ps).forEach(([pid, stats]) => {
+              if (!combinedStats[pid]) combinedStats[pid] = { runs: 0, balls: 0, wickets: 0, runs_conceded: 0, balls_bowled: 0 };
+              combinedStats[pid].runs += (stats.runs || 0);
+              combinedStats[pid].balls += (stats.balls || 0);
+              combinedStats[pid].wickets += (stats.wickets || 0);
+              combinedStats[pid].runs_conceded += (stats.runs_conceded || 0);
+              combinedStats[pid].balls_bowled += (stats.balls_bowled || 0);
+          });
+      });
+
+      Object.entries(combinedStats).forEach(([pid, stats]) => {
+          if (stats.runs > max_runs) {
+              max_runs = stats.runs;
+              best_batsman_id = pid;
+          }
+          if (stats.wickets > max_wickets) {
+              max_wickets = stats.wickets;
+              best_bowler_id = pid;
+          } else if (stats.wickets === max_wickets && stats.wickets >= 0) {
+              // Tie-break for bowler: fewer runs conceded
+              const currentBest = combinedStats[best_bowler_id] || { runs_conceded: 9999 };
+              if (stats.runs_conceded < currentBest.runs_conceded) {
+                  best_bowler_id = pid;
+              }
+          }
+      });
+
+      await matchRef.update({ 
+        winner_team_id, 
+        match_summary, 
+        status: "completed",
+        best_batsman_id,
+        best_bowler_id
+      });
+    }
+  }
 
   await liveScoreRef.update({ ...ls, last_updated: new Date() });
   await matchRef.update({ total_runs: ls.total_runs, total_wickets: ls.total_wickets });
+
 
   return ls;
 };
 
 const swapBatsman = async (match_id, new_batsman_id) => {
   const { ref, data: ls } = await getActiveLiveScore(match_id);
-  ls.striker_id = new_batsman_id;
-  await ref.update({ striker_id: new_batsman_id, last_updated: new Date() });
+  
+  // Intelligent Slot Filling: Detect which slot is null and fill it
+  if (!ls.striker_id) {
+    ls.striker_id = new_batsman_id;
+  } else if (!ls.non_striker_id) {
+    ls.non_striker_id = new_batsman_id;
+  } else {
+    // Default to striker if both are somehow filled or null
+    ls.striker_id = new_batsman_id;
+  }
+
+  await ref.update({ 
+    striker_id: ls.striker_id, 
+    non_striker_id: ls.non_striker_id, 
+    last_updated: new Date() 
+  });
   return ls;
 };
 
@@ -241,7 +340,9 @@ const reverseBall = async (match_id) => {
   ls.total_runs -= runs_to_remove;
   if (lastBall.is_wicket) ls.total_wickets -= 1;
   ls.current_over = lastBall.over; ls.balls_in_over = lastBall.ball;
-  ls.striker_id = lastBall.striker; ls.bowler_id = lastBall.bowler;
+  ls.striker_id = lastBall.striker;
+  ls.non_striker_id = lastBall.nonStriker; // Restore both slots
+  ls.bowler_id = lastBall.bowler;
   if (lastBall.is_wicket) ls.wickets_list.pop();
   await ref.update({ ...ls, last_updated: new Date() });
   await matchRef.update({ total_runs: ls.total_runs, total_wickets: ls.total_wickets });
