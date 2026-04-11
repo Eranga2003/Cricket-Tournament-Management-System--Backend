@@ -73,7 +73,7 @@ const startMatchInnings = async (match_id, data) => {
   
   // Link the innings in the main match doc
   await matchRef.update({ 
-    status: "live", 
+    status: "Live", 
     innings1_doc_id: inn1_id,
     current_innings_id: inn1_id,
     total_runs: 0, 
@@ -239,15 +239,17 @@ const processBall = async (match_id, ballData) => {
 
     if (ls.innings_number === 2) {
       const matchData = (await matchRef.get()).data();
-      const teamAName = matchData.team1_name || "Team A";
-      const teamBName = matchData.team2_name || "Team B";
+      const team1Name = matchData.team1_name || "Team 1";
+      const team2Name = matchData.team2_name || "Team 2";
 
       if (ls.total_runs >= ls.target_runs) {
         winner_team_id = ls.batting_team_id;
-        match_summary = `${teamBName} won by ${10 - ls.total_wickets} wickets!`;
+        const winnerName = String(winner_team_id) === String(matchData.team1_id) ? team1Name : team2Name;
+        match_summary = `${winnerName} won by ${10 - ls.total_wickets} wickets!`;
       } else {
         winner_team_id = ls.bowling_team_id;
-        match_summary = `${teamAName} won by ${ls.target_runs - ls.total_runs - 1} runs!`;
+        const winnerName = String(winner_team_id) === String(matchData.team1_id) ? team1Name : team2Name;
+        match_summary = `${winnerName} won by ${ls.target_runs - ls.total_runs} run(s)!`;
       }
       
       // --- MVP CALCULATION ---
@@ -290,7 +292,7 @@ const processBall = async (match_id, ballData) => {
       await matchRef.update({ 
         winner_team_id, 
         match_summary, 
-        status: "completed",
+        status: "Completed",
         best_batsman_id,
         best_bowler_id
       });
@@ -372,10 +374,27 @@ const archiveFinalMatchReport = async (match_id) => {
   const inn1Snap = await db.collection(LIVE_SCORES_COL).doc(inn1_id).get();
   const inn2Snap = await db.collection(LIVE_SCORES_COL).doc(inn2_id).get();
 
+  // ENRICHMENT: Fetch Team Snapshots for permanent visual history
+  let enrichedMatchDetails = { ...matchData };
+  try {
+      const t1Snap = await db.collection("teams").doc(matchData.team1_id).get();
+      const t2Snap = await db.collection("teams").doc(matchData.team2_id).get();
+      if (t1Snap.exists) {
+          enrichedMatchDetails.team1_name = t1Snap.data().team_name || t1Snap.data().name;
+          enrichedMatchDetails.team1_logo = t1Snap.data().logo_url;
+      }
+      if (t2Snap.exists) {
+          enrichedMatchDetails.team2_name = t2Snap.data().team_name || t2Snap.data().name;
+          enrichedMatchDetails.team2_logo = t2Snap.data().logo_url;
+      }
+  } catch (e) {
+      console.warn("Failed to bake team snapshots into report:", e);
+  }
+
   const report = {
     match_id,
     tournament_id: matchData.tournament_id,
-    match_details: matchData,
+    match_details: enrichedMatchDetails,
     innings1: inn1Snap.exists ? inn1Snap.data() : null,
     innings2: inn2Snap.exists ? inn2Snap.data() : null,
     archived_at: new Date(),
@@ -392,7 +411,7 @@ const archiveFinalMatchReport = async (match_id) => {
 
   // Update original match doc
   await matchRef.update({
-    status: "completed",
+    status: "Completed",
     is_archived: true,
     archived_at: new Date()
   });

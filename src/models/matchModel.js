@@ -62,9 +62,9 @@ const setMatchWinner = async (match_id, winner_team_id) => {
   const matchRef = db.collection(COLLECTION_NAME).doc(match_id);
   await matchRef.update({ 
     winner_team_id,
-    status: "completed"
+    status: "Completed"
   });
-  return { id: match_id, winner_team_id, status: "completed" };
+  return { id: match_id, winner_team_id, status: "Completed" };
 };
 
 // Create a single match manually (Ad-Hoc)

@@ -177,7 +177,7 @@ exports.getArchivedReports = async (req, res) => {
 
 exports.getLiveMatches = async (req, res) => {
   try {
-    const snap = await db.collection("matches").where("status", "==", "live").get();
+    const snap = await db.collection("matches").where("status", "==", "Live").get();
     const matches = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     res.json({ matches });
   } catch (err) {
